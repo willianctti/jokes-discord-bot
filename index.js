@@ -3,11 +3,13 @@ const { REST } = require('@discordjs/rest');
 const { Routes } = require('discord-api-types/v9');
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const dotenv = require('dotenv');
+const axios = require('axios');
 dotenv.config();
 
-const { TOKEN, CLIENT_ID, GUILD_ID } = process.env;
+const { TOKEN, CLIENT_ID, GUILD_ID, API_KEY } = process.env;
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+const url = `https://apiv3.apifootball.com/?action=get_countries&APIkey=${API_KEY}`;
 
 const jokes = [
     "Por que o esqueleto não brigou com ninguém? Porque ele não tem estômago para isso!",
@@ -32,14 +34,31 @@ const jokes = [
     "Por que o computador foi preso? Porque ele executou um programa."
   ];
 
-const commands = [
-  new SlashCommandBuilder()
-    .setName('piada')
-    .setDescription('Conta uma piada aleatória')
-    .toJSON()
-];
+  const commands = [
+    new SlashCommandBuilder()
+      .setName('piada')
+      .setDescription('Conta uma piada aleatória')
+      .toJSON(),
+    new SlashCommandBuilder()
+      .setName('jogos')
+      .setDescription('Mostra a lista de jogos de hoje')
+      .toJSON()
+  ];
 
 const rest = new REST({ version: '9' }).setToken(TOKEN);
+
+async function fetchTodaysGames() {
+  const today = new Date().toISOString().split('T')[0];
+  const url = `https://apiv3.apifootball.com/?action=get_events&from=${today}&to=${today}&APIkey=${API_KEY}`;
+
+  try {
+    const response = await axios.get(url);
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching games:', error);
+    return null;
+  }
+}
 
 (async () => {
   try {
@@ -68,6 +87,22 @@ client.on(Events.InteractionCreate, async interaction => {
   if (commandName === 'piada') {
     const randomJoke = jokes[Math.floor(Math.random() * jokes.length)];
     await interaction.reply(randomJoke);
+  } else if (commandName === 'jogos') {
+    await interaction.deferReply();
+
+    const games = await fetchTodaysGames();
+    if (games && games.length > 0) {
+      let response = "Jogos de hoje:\n\n";
+      games.slice(0, 10).forEach(game => {
+        response += `${game.match_hometeam_name} vs ${game.match_awayteam_name} - ${game.match_time}\n`;
+      });
+      if (games.length > 10) {
+        response += "\n(Mostrando apenas os 10 primeiros jogos)";
+      }
+      await interaction.editReply(response);
+    } else {
+      await interaction.editReply("Desculpe, não foi possível obter a lista de jogos para hoje.");
+    }
   }
 });
 
